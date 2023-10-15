@@ -10,7 +10,10 @@ namespace Order.Controllers
     public class NewOrderController : ControllerBase
     {
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> 718de0af9153a5114d4da90144bba62dc37bf388
         string connectionString = "Data Source=DESKTOP-23TGGIB;Initial Catalog=ProductTable1;Integrated Security=True;Connect Timeout=30;Encrypt=False;Trust Server Certificate=False;Application Intent=ReadWrite;Multi Subnet Failover=False";
 
 

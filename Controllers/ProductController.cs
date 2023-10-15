@@ -15,6 +15,7 @@ namespace Order.Controllers
     {
         private readonly string connectionString = "Data Source=DESKTOP-23TGGIB;Initial Catalog=ProductTable1;Integrated Security=True;Connect Timeout=30;Encrypt=False;Trust Server Certificate=False;Application Intent=ReadWrite;Multi Subnet Failover=False";
 
+<<<<<<< HEAD
         private readonly IValidator<CustomerOrderDetails> _validate;
         private readonly IConfiguration _config;
 
@@ -23,6 +24,8 @@ namespace Order.Controllers
             _validate = validator;
             _config = config;
         }
+=======
+>>>>>>> 718de0af9153a5114d4da90144bba62dc37bf388
         [Route("GetAllProduct")]
         [HttpGet]
         public IActionResult GetProducts()
@@ -52,12 +55,19 @@ namespace Order.Controllers
 
         [Route("CreateOrder")]
         [HttpPost]
+<<<<<<< HEAD
         public async  Task<IActionResult> CreateOrder([FromBody] CustomerOrderDetails orderDetails)
+=======
+        public IActionResult CreateOrder([FromBody] CustomerOrderDetails orderDetails)
+>>>>>>> 718de0af9153a5114d4da90144bba62dc37bf388
         {
             using (SqlConnection connection = new SqlConnection(connectionString))
             {
                 connection.Open();
+<<<<<<< HEAD
                 var validationResult = await _validate.ValidateAsync(orderDetails);
+=======
+>>>>>>> 718de0af9153a5114d4da90144bba62dc37bf388
 
                 int orderId = 1;
                 int rowsAffected = 0;
