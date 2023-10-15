@@ -1,7 +1,9 @@
 ﻿
+using FluentValidation;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Data.SqlClient;
 using Order.Model;
+using System.ComponentModel.DataAnnotations;
 using System.Net;
 
 namespace Order.Controllers
@@ -12,6 +14,16 @@ namespace Order.Controllers
     public class ProductController : Controller
     {
         private readonly string connectionString = "Data Source=DESKTOP-23TGGIB;Initial Catalog=ProductTable1;Integrated Security=True;Connect Timeout=30;Encrypt=False;Trust Server Certificate=False;Application Intent=ReadWrite;Multi Subnet Failover=False";
+
+        private readonly IValidator<CustomerOrderDetails> _validate;
+        private readonly IConfiguration _config;
+
+        public ProductController(IValidator<CustomerOrderDetails> validator, IConfiguration config)
+        {
+            _validate = validator;
+            _config = config;
+        }
+        [Route("GetAllProduct")]
         [HttpGet]
         public IActionResult GetProducts()
         {
@@ -28,7 +40,7 @@ namespace Order.Controllers
                         {
                             int id = (int)reader["Product_Id"];
                             string name = reader["Product_Name"].ToString();
-                            int price = (int)reader["Product_Price"];
+                            int price =(int) reader["Product_Price"];
 
                             products.Add(new Product { product_id = id, product_name = name, product_price = price });
                         }
@@ -37,81 +49,122 @@ namespace Order.Controllers
             }
             return Ok(products);
         }
-        [Route("AddProduct")]
+
+        [Route("CreateOrder")]
         [HttpPost]
-        public IActionResult AddProducts([FromBody] OrderDetails orderdetails)
+        public async  Task<IActionResult> CreateOrder([FromBody] CustomerOrderDetails orderDetails)
         {
-
-            //List <Product> products = new List<Product>();
-            //for (int i = 0; i < 3; i++)
-            //{
-            //    products[i].product_id = i;
-            //    products[i].product_name = "earphone" + i.ToString();
-            //    products[i].product_price = 200 +i;
-            //}
-
-
-                using (SqlConnection conn = new SqlConnection(connectionString))
+            using (SqlConnection connection = new SqlConnection(connectionString))
             {
-                conn.Open();
+                connection.Open();
+                var validationResult = await _validate.ValidateAsync(orderDetails);
 
-                int rowsaffected = 0;
-                string sql = "insert into CustomerOrderdetails (CustomerName,Email,TaxPercentage,TotalTaxAmount,TotalAmount) values(@CustomerName,@Email,@TaxPercentage,@TotalTaxAmount,@TotalAmount)";
-                using (SqlCommand command = new SqlCommand(sql, conn))
+                int orderId = 1;
+                int rowsAffected = 0;
+
+                // Insert customer details
+                string insertCustomerQuery = "INSERT INTO CustomerDetails (CustomerName, Email) VALUES (@CustomerName, @Email); SELECT SCOPE_IDENTITY();";
+                using (SqlCommand insertCustomerCommand = new SqlCommand(insertCustomerQuery, connection))
                 {
-                    command.Parameters.AddWithValue("@CustomerName", orderdetails.customer_name);
-                    command.Parameters.AddWithValue("@Email", orderdetails.email);
-                    command.Parameters.AddWithValue("@TaxPercentage", orderdetails.tax_percentage);
-                    command.Parameters.AddWithValue("@TotalTaxAmount", orderdetails.total_tax_amount);
-                    command.Parameters.AddWithValue("@TotalAmount", orderdetails.total_amount);
-
-            
-
-                    rowsaffected = command.ExecuteNonQuery();
-                }
-                string sql1 = "insert into CustomerAddress (Street,City,State,ZipCode) values(@Street,@City,@State,@ZipCode)";
-                using (SqlCommand cmd1 = new SqlCommand(sql1, conn))
-                {
-
-                   
-                    cmd1.Parameters.AddWithValue("@Street", orderdetails.customerAddress.street);
-                    cmd1.Parameters.AddWithValue("@City", orderdetails.customerAddress.city);
-                    cmd1.Parameters.AddWithValue("@State", orderdetails.customerAddress.state);
-                    cmd1.Parameters.AddWithValue("@ZipCode", orderdetails.customerAddress.zip_code);
-
-
-                    rowsaffected = cmd1.ExecuteNonQuery();
+                    insertCustomerCommand.Parameters.AddWithValue("@CustomerName", orderDetails.customer_name);
+                    insertCustomerCommand.Parameters.AddWithValue("@Email", orderDetails.email);
+                    orderId = Convert.ToInt32(insertCustomerCommand.ExecuteScalar());
                 }
 
+                // Insert customer address
+                string insertAddressQuery = "INSERT INTO CustomerAddress ( Street, City, State, ZipCode) VALUES ( @Street, @City, @State, @ZipCode);";
+                using (SqlCommand insertAddressCommand = new SqlCommand(insertAddressQuery, connection))
+                {
+                    //insertAddressCommand.Parameters.AddWithValue("@OrderId", orderId);
+                    insertAddressCommand.Parameters.AddWithValue("@Street", orderDetails.customerAddress.street);
+                    insertAddressCommand.Parameters.AddWithValue("@City", orderDetails.customerAddress.city);
+                    insertAddressCommand.Parameters.AddWithValue("@State", orderDetails.customerAddress.state);
+                    insertAddressCommand.Parameters.AddWithValue("@ZipCode", orderDetails.customerAddress.zip_code);
+                    rowsAffected = insertAddressCommand.ExecuteNonQuery();
+                }
 
-              //  string sqlproduct = "insert into ProductTable (Product_ID,Product_Name,Product_Price) values(@Product_ID,@Product_Name,@Product_Price)";
-              //for(int i=0;i<3;i++)
-              //  {
-              //      using (SqlCommand cmd1 = new SqlCommand(sqlproduct, conn))
-              //      {
+                // Calculate order total, tax, and total order amount
+                decimal orderTotal = 0;
+                decimal totalTaxAmount = 0;
 
+                foreach (var item in orderDetails.ordercart)
+                {
+                    string getProductPriceQuery = "SELECT Product_Price FROM ProductTable WHERE Product_Id = @Product_Id";
+                    using (SqlCommand getPriceCommand = new SqlCommand(getProductPriceQuery, connection))
+                    {
+                        getPriceCommand.Parameters.AddWithValue("@Product_Id", item.product_id);
+                        string priceString = getPriceCommand.ExecuteScalar()?.ToString();
 
-              //          cmd1.Parameters.AddWithValue("@Product_ID", orderdetails.products[i].product_id);
-              //          cmd1.Parameters.AddWithValue("@Product_Name", orderdetails.products[i].product_name);
-              //          cmd1.Parameters.AddWithValue("@Product_Price", orderdetails.products[i].product_price);
-                       
+                        if (decimal.TryParse(priceString, out decimal productPrice))
+                        {
+                            // Calculate subtotal for each product
+                            decimal subtotal = productPrice * item.Quantity;
+                            orderTotal += subtotal;
+                        }
+                    }
+                }
 
+                // Calculate total tax amount and total order amount
+                double taxPerRupee = 0.18;
+                totalTaxAmount = orderTotal * (decimal)taxPerRupee;
+                decimal totalOrderAmount = totalTaxAmount + orderTotal;
 
-              //          rowsaffected = cmd1.ExecuteNonQuery();
-              //      }
-              //  }
+                // Insert order details
+                string insertOrderQuery = "INSERT INTO Orders (OrderID, TotalAmount, TotalTaxAmount, TotalOrderAmount) VALUES (@OrderID, @TotalAmount, @TotalTaxAmount, @TotalOrderAmount)";
+                using (SqlCommand insertOrderCommand = new SqlCommand(insertOrderQuery, connection))
+                {
+                    insertOrderCommand.Parameters.AddWithValue("@OrderID", orderId);
+                    insertOrderCommand.Parameters.AddWithValue("@TotalAmount", orderTotal);
+                    insertOrderCommand.Parameters.AddWithValue("@TotalTaxAmount", totalTaxAmount);
+                    insertOrderCommand.Parameters.AddWithValue("@TotalOrderAmount", totalOrderAmount);
+                    rowsAffected += insertOrderCommand.ExecuteNonQuery();
+                }
 
-                return Ok(rowsaffected);
+                // Insert products into ProductTable
+                string insertProductQuery = "INSERT INTO OrderCart (CustomerOrderID,ProductId, ProductName, Quantity) VALUES (@CustomerOrderID,@ProductId, @ProductName, @Quantity)";
+                using (SqlCommand insertProductCommand = new SqlCommand(insertProductQuery, connection))
+                {
+                    foreach (var item in orderDetails.ordercart)
+                    {
+                        // Access data from ordercart
+                        int productId = item.product_id;
+                        string productName = item.product_name;
+                        int quantity = item.Quantity;
+
+                        // Insert ordercart data into ProductTable
+                        insertProductCommand.Parameters.Clear();
+                        insertProductCommand.Parameters.AddWithValue("@CustomerOrderID", orderId);
+                        insertProductCommand.Parameters.AddWithValue("@ProductId", productId);
+                        insertProductCommand.Parameters.AddWithValue("@ProductName", productName);
+                        insertProductCommand.Parameters.AddWithValue("@Quantity", quantity);
+
+                        rowsAffected += insertProductCommand.ExecuteNonQuery();
+                    }
+
+                }
+
+                connection.Close();
+
+                // Return the order details
+                return Ok(new
+                {
+                    OrderId = orderId,
+                    TotalAmount = orderTotal,
+                    TotalTaxAmount = totalTaxAmount,
+                    TotalOrderAmount = totalOrderAmount
+                });
             }
         }
+
+        [Route("UpdateProduct")]
         [HttpPut]
-        public IActionResult UpdateProduct([FromBody] Product product, [FromQuery] int productId)
+        public IActionResult UpdateProduct([FromBody] Product product)
         {
             using (SqlConnection conn = new SqlConnection(connectionString))
             {
                 conn.Open();
 
-                string update = "Update ProductTable Set Product_Name=@Product_Name,Product_Price=@Product_Price where Product_Id=@Product_ID";
+                string update = "Update OrderCart Set Product_Name=@Product_Name,Product_Price=@Product_Price where Product_Id=@Product_ID";
                 using (SqlCommand command = new SqlCommand(update, conn))
                 {
                     command.Parameters.AddWithValue("@Product_ID", product.product_id);
@@ -123,16 +176,18 @@ namespace Order.Controllers
                 }
             }
         }
+
+        [Route("DeleteProductFromId")]
         [HttpDelete]
-        public IActionResult DeleteProduct([FromQuery]Product product)
+        public IActionResult DeleteProductById(int product_Id)
         {
             using (SqlConnection connection = new SqlConnection(connectionString))
             {
                 connection.Open();
-                string delete = "delete from ProductTable where Product_Id=@Product_Id";
-                using (SqlCommand command= new SqlCommand(delete, connection))
+                string delete = "delete from OrderCart where Product_Id=@Product_Id";
+                using (SqlCommand command = new SqlCommand(delete, connection))
                 {
-                    command.Parameters.AddWithValue("@Product_ID", product.product_id);
+                    command.Parameters.AddWithValue("@Product_ID", product_Id);
 
                     int rowsaffected = command.ExecuteNonQuery();
                     return Ok(rowsaffected);
@@ -140,10 +195,23 @@ namespace Order.Controllers
             }
         }
 
+        //[Route("DeleteProduct")]
+        //[HttpDelete]
+        //public IActionResult DeleteProduct([FromQuery] Product product)
+        //{
+        //    using (SqlConnection connection = new SqlConnection(connectionString))
+        //    {
+        //        connection.Open();
+        //        string delete = "delete from OrderCart where Product_Id=@Product_Id";
+        //        using (SqlCommand command = new SqlCommand(delete, connection))
+        //        {
+        //            command.Parameters.AddWithValue("@Product_ID", product.product_id);
 
-
-
+        //            int rowsaffected = command.ExecuteNonQuery();
+        //            return Ok(rowsaffected);
+        //        }
+        //    }
+        //}
 
     }
 }
-

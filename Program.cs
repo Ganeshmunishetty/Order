@@ -1,3 +1,8 @@
+using FluentValidation;
+using Microsoft.AspNetCore.Identity;
+using Order.Model;
+using Order.Validation;
+
 namespace Order
 {
     public class Program
@@ -12,7 +17,9 @@ namespace Order
             // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
             builder.Services.AddEndpointsApiExplorer();
             builder.Services.AddSwaggerGen();
-
+            builder.Services.AddTransient<IValidator<CustomerAddress>, CustomerAddressValidation>();
+            builder.Services.AddTransient<IValidator<CustomerOrderDetails>, CustomerDetailsValidation>();
+            builder.Services.AddTransient<IValidator<OrderCart>, OrderCartValidation>();
             var app = builder.Build();
 
             // Configure the HTTP request pipeline.
